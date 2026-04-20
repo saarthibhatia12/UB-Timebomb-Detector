@@ -63,6 +63,77 @@ def has_nsw_flag(func_ir: str) -> bool:
     return bool(re.search(r"\b(add|sub|mul|shl)\s+nsw\b", func_ir))
 
 
+def has_signed_add_compare_pattern(func_ir: str) -> bool:
+    """
+    Detect patterns like `(x + 1 > x)` or `(x + 1 < x)` in LLVM IR.
+
+    This is used for clang 22 behavior where O2 may fold the expression to a
+    constant return instead of introducing new `nsw` at O2.
+    """
+    load_ptr_by_var = {
+        m.group(1): m.group(2)
+        for m in re.finditer(
+            r"^\s*(%[\w.]+)\s*=\s*load i32,\s*ptr\s*(%[\w.]+)\b",
+            func_ir,
+            re.MULTILINE,
+        )
+    }
+
+    add_ops = [
+        (m.group(1), m.group(2), int(m.group(3)))
+        for m in re.finditer(
+            r"^\s*(%[\w.]+)\s*=\s*add nsw i32\s*(%[\w.]+),\s*(-?\d+)\b",
+            func_ir,
+            re.MULTILINE,
+        )
+    ]
+
+    signed_cmps = [
+        (m.group(1), m.group(2))
+        for m in re.finditer(
+            r"^\s*%[\w.]+\s*=\s*icmp\s+s(?:gt|lt|ge|le)\s+i32\s*(%[\w.]+),\s*(%[\w.]+)\b",
+            func_ir,
+            re.MULTILINE,
+        )
+    ]
+
+    for add_result, base_var, delta in add_ops:
+        if delta not in (1, -1):
+            continue
+
+        for lhs, rhs in signed_cmps:
+            if add_result == lhs:
+                other_var = rhs
+            elif add_result == rhs:
+                other_var = lhs
+            else:
+                continue
+
+            if base_var == other_var:
+                return True
+
+            if (
+                base_var in load_ptr_by_var
+                and other_var in load_ptr_by_var
+                and load_ptr_by_var[base_var] == load_ptr_by_var[other_var]
+            ):
+                return True
+
+    return False
+
+
+def returns_constant_i32(func_ir: str) -> Optional[int]:
+    """Return constant i32 value if function has a single constant return."""
+    ret_values = re.findall(r"^\s*ret i32 (-?\d+)\b", func_ir, re.MULTILINE)
+    if len(ret_values) != 1:
+        return None
+
+    try:
+        return int(ret_values[0])
+    except ValueError:
+        return None
+
+
 def has_undef(func_ir: str) -> bool:
     """Check if undef appears in value-producing positions."""
     return bool(re.search(r"(select|phi|ret)\s+.*\bundef\b", func_ir))

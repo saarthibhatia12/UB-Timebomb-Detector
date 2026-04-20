@@ -12,7 +12,9 @@ from backend.utils.ir_parser import (
     count_unconditional_branches,
     has_nsw_flag,
     has_null_check,
+    has_signed_add_compare_pattern,
     has_undef,
+    returns_constant_i32,
 )
 
 
@@ -54,6 +56,16 @@ def detect_changes(compiled_result: dict) -> List[Dict[str, Any]]:
         undef_o2 = has_undef(o2_ir)
         undef_exposed = undef_o2 and not undef_o0
 
+        # Clang 22 pattern: signed add-compare at O0 folded to constant at O2.
+        has_signed_cmp_o0 = has_signed_add_compare_pattern(o0_ir)
+        o0_const_ret = returns_constant_i32(o0_ir)
+        o2_const_ret = returns_constant_i32(o2_ir)
+        signed_overflow_folded = (
+            has_signed_cmp_o0
+            and o0_const_ret is None
+            and o2_const_ret in (0, 1)
+        )
+
         # Determine if there is a meaningful behavioral change.
         block_loss = blocks_o2 < blocks_o0
         branch_eliminated = branches_o2 < branches_o0
@@ -64,6 +76,7 @@ def detect_changes(compiled_result: dict) -> List[Dict[str, Any]]:
             or (nsw_added and branch_eliminated)
             or null_check_removed
             or undef_exposed
+            or signed_overflow_folded
         )
 
         if has_change:
@@ -78,6 +91,8 @@ def detect_changes(compiled_result: dict) -> List[Dict[str, Any]]:
                 change_types.append("null_check_removed")
             if undef_exposed:
                 change_types.append("undef_exposed")
+            if signed_overflow_folded:
+                change_types.append("signed_overflow_folded")
 
             changes.append(
                 {
@@ -92,6 +107,9 @@ def detect_changes(compiled_result: dict) -> List[Dict[str, Any]]:
                         "null_checks_O0": null_checks_o0,
                         "null_checks_O2": null_checks_o2,
                         "undef_exposed": undef_exposed,
+                        "signed_overflow_folded": signed_overflow_folded,
+                        "o0_const_ret": o0_const_ret,
+                        "o2_const_ret": o2_const_ret,
                     },
                     "ir": {
                         "O0": o0_ir,
@@ -115,6 +133,9 @@ def detect_changes(compiled_result: dict) -> List[Dict[str, Any]]:
                     "null_checks_O0": 0,
                     "null_checks_O2": 0,
                     "undef_exposed": False,
+                    "signed_overflow_folded": False,
+                    "o0_const_ret": None,
+                    "o2_const_ret": None,
                 },
                 "ir": {
                     "O0": "",

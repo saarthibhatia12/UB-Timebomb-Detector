@@ -57,13 +57,18 @@ FIX_SUGGESTIONS = {
 
 def _classify_signed_overflow(change: Dict[str, Any]) -> bool:
     """
-    Signed overflow requires BOTH nsw addition and branch/block elimination.
+    Detect signed-overflow-sensitive rewrites.
+
+    Supported signals:
+    - nsw introduced with branch/block elimination (older behavior)
+    - signed add/compare folded to constant return at O2 (clang 22 pattern)
     """
     metrics = change["metrics"]
     nsw_added = metrics["nsw_added"]
     branch_eliminated = metrics["branches_O2"] < metrics["branches_O0"]
     block_loss = metrics["blocks_O2"] < metrics["blocks_O0"]
-    return nsw_added and (branch_eliminated or block_loss)
+    folded = metrics.get("signed_overflow_folded", False)
+    return folded or (nsw_added and (branch_eliminated or block_loss))
 
 
 def _classify_null_deref(change: Dict[str, Any]) -> bool:
@@ -139,11 +144,18 @@ def classify_diffs(
         if _classify_signed_overflow(change):
             category = UBCategory.SIGNED_OVERFLOW
             severity = Severity.CRITICAL
-            detail = (
-                "'add nsw' at -O2 combined with branch elimination: "
-                "optimizer assumed signed overflow cannot occur, "
-                "eliminating safety checks."
-            )
+            if change["metrics"].get("signed_overflow_folded", False):
+                detail = (
+                    "Signed add/compare at -O0 was folded to a constant return "
+                    "at -O2 (e.g., x + 1 > x -> 1, x + 1 < x -> 0): "
+                    "optimizer assumed signed overflow is undefined."
+                )
+            else:
+                detail = (
+                    "'add nsw' at -O2 combined with branch elimination: "
+                    "optimizer assumed signed overflow cannot occur, "
+                    "eliminating safety checks."
+                )
             confidence = "HIGH"
         elif _classify_null_deref(change):
             category = UBCategory.NULL_DEREF
