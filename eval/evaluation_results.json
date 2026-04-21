@@ -1,0 +1,47 @@
+[
+  {
+    "file": "C:\\Users\\graph\\Desktop\\UB-Timebomb-Detector\\test_cases/signed_overflow.c",
+    "expected": "signed_overflow",
+    "detected": true,
+    "found_categories": [
+      "signed_overflow"
+    ],
+    "total_findings": 1
+  },
+  {
+    "file": "C:\\Users\\graph\\Desktop\\UB-Timebomb-Detector\\test_cases/null_deref.c",
+    "expected": "null_deref",
+    "detected": true,
+    "found_categories": [
+      "null_deref"
+    ],
+    "total_findings": 1
+  },
+  {
+    "file": "C:\\Users\\graph\\Desktop\\UB-Timebomb-Detector\\test_cases/strict_aliasing.c",
+    "expected": "strict_aliasing",
+    "detected": true,
+    "found_categories": [
+      "strict_aliasing"
+    ],
+    "total_findings": 1
+  },
+  {
+    "file": "C:\\Users\\graph\\Desktop\\UB-Timebomb-Detector\\test_cases/uninitialized.c",
+    "expected": "uninitialized_use",
+    "detected": true,
+    "found_categories": [
+      "uninitialized_use"
+    ],
+    "total_findings": 1
+  },
+  {
+    "file": "C:\\Users\\graph\\Desktop\\UB-Timebomb-Detector\\test_cases/loop_overflow.c",
+    "expected": "signed_overflow",
+    "detected": true,
+    "found_categories": [
+      "signed_overflow"
+    ],
+    "total_findings": 1
+  }
+]

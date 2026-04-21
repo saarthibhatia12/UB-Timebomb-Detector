@@ -10,9 +10,11 @@ from backend.utils.ir_parser import (
     count_basic_blocks,
     count_conditional_branches,
     count_unconditional_branches,
+    has_loop_with_signed_overflow_guard,
     has_nsw_flag,
     has_null_check,
     has_signed_add_compare_pattern,
+    has_type_punning_pattern,
     has_undef,
     returns_constant_i32,
 )
@@ -66,6 +68,15 @@ def detect_changes(compiled_result: dict) -> List[Dict[str, Any]]:
             and o2_const_ret in (0, 1)
         )
 
+        # Loop overflow: O0 has loop with signed overflow guard, O2 collapsed it.
+        loop_overflow_guard = (
+            has_loop_with_signed_overflow_guard(o0_ir)
+            and blocks_o2 < blocks_o0
+        )
+
+        # Strict aliasing via type punning (opaque pointer mode, LLVM 15+).
+        type_punning = has_type_punning_pattern(o0_ir, o2_ir)
+
         # Determine if there is a meaningful behavioral change.
         block_loss = blocks_o2 < blocks_o0
         branch_eliminated = branches_o2 < branches_o0
@@ -77,6 +88,8 @@ def detect_changes(compiled_result: dict) -> List[Dict[str, Any]]:
             or null_check_removed
             or undef_exposed
             or signed_overflow_folded
+            or loop_overflow_guard
+            or type_punning
         )
 
         if has_change:
@@ -93,6 +106,10 @@ def detect_changes(compiled_result: dict) -> List[Dict[str, Any]]:
                 change_types.append("undef_exposed")
             if signed_overflow_folded:
                 change_types.append("signed_overflow_folded")
+            if loop_overflow_guard:
+                change_types.append("loop_overflow_guard")
+            if type_punning:
+                change_types.append("type_punning")
 
             changes.append(
                 {
@@ -108,6 +125,8 @@ def detect_changes(compiled_result: dict) -> List[Dict[str, Any]]:
                         "null_checks_O2": null_checks_o2,
                         "undef_exposed": undef_exposed,
                         "signed_overflow_folded": signed_overflow_folded,
+                        "loop_overflow_guard": loop_overflow_guard,
+                        "type_punning": type_punning,
                         "o0_const_ret": o0_const_ret,
                         "o2_const_ret": o2_const_ret,
                     },
@@ -134,6 +153,8 @@ def detect_changes(compiled_result: dict) -> List[Dict[str, Any]]:
                     "null_checks_O2": 0,
                     "undef_exposed": False,
                     "signed_overflow_folded": False,
+                    "loop_overflow_guard": False,
+                    "type_punning": False,
                     "o0_const_ret": None,
                     "o2_const_ret": None,
                 },

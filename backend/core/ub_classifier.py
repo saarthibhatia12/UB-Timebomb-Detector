@@ -68,7 +68,8 @@ def _classify_signed_overflow(change: Dict[str, Any]) -> bool:
     branch_eliminated = metrics["branches_O2"] < metrics["branches_O0"]
     block_loss = metrics["blocks_O2"] < metrics["blocks_O0"]
     folded = metrics.get("signed_overflow_folded", False)
-    return folded or (nsw_added and (branch_eliminated or block_loss))
+    loop_guard = metrics.get("loop_overflow_guard", False)
+    return folded or loop_guard or (nsw_added and (branch_eliminated or block_loss))
 
 
 def _classify_null_deref(change: Dict[str, Any]) -> bool:
@@ -84,8 +85,16 @@ def _classify_strict_aliasing(change: Dict[str, Any]) -> bool:
     """
     Best-effort strict-aliasing heuristic.
 
-    Supports both typed pointers and LLVM opaque pointer mode.
+    Supports both typed pointers (bitcast) and LLVM opaque pointer mode
+    (type punning detected by change detector).
     """
+    metrics = change["metrics"]
+
+    # New: opaque pointer type punning detected at IR level
+    if metrics.get("type_punning", False):
+        return True
+
+    # Legacy: typed pointer bitcast detection
     o0_ir = change["ir"]["O0"]
     o2_ir = change["ir"]["O2"]
 
@@ -149,6 +158,12 @@ def classify_diffs(
                     "Signed add/compare at -O0 was folded to a constant return "
                     "at -O2 (e.g., x + 1 > x -> 1, x + 1 < x -> 0): "
                     "optimizer assumed signed overflow is undefined."
+                )
+            elif change["metrics"].get("loop_overflow_guard", False):
+                detail = (
+                    "Loop containing signed overflow guard at -O0 was collapsed "
+                    "at -O2: optimizer assumed signed overflow cannot occur, "
+                    "removing the overflow safety check."
                 )
             else:
                 detail = (
