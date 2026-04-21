@@ -1,0 +1,11 @@
+venv/
+node_modules/
+__pycache__/
+*.pyc
+*.ll
+.env
+dist/
+build/
+*.egg-info/
+eval/evaluation_results.json
+.vite/

@@ -43,5 +43,50 @@
       "signed_overflow"
     ],
     "total_findings": 1
+  },
+  {
+    "file": "C:\\Users\\graph\\Desktop\\UB-Timebomb-Detector\\eval/cve_cases/gcc_bug_30475.c",
+    "expected": "signed_overflow",
+    "detected": true,
+    "found_categories": [
+      "signed_overflow"
+    ],
+    "total_findings": 1
+  },
+  {
+    "file": "C:\\Users\\graph\\Desktop\\UB-Timebomb-Detector\\eval/cve_cases/cve_2009_1897.c",
+    "expected": "null_deref",
+    "detected": true,
+    "found_categories": [
+      "null_deref"
+    ],
+    "total_findings": 1
+  },
+  {
+    "file": "C:\\Users\\graph\\Desktop\\UB-Timebomb-Detector\\eval/cve_cases/cve_2017_9798.c",
+    "expected": "uninitialized_use",
+    "detected": true,
+    "found_categories": [
+      "uninitialized_use"
+    ],
+    "total_findings": 1
+  },
+  {
+    "file": "C:\\Users\\graph\\Desktop\\UB-Timebomb-Detector\\eval/cve_cases/cve_2014_3153.c",
+    "expected": "signed_overflow",
+    "detected": true,
+    "found_categories": [
+      "signed_overflow"
+    ],
+    "total_findings": 1
+  },
+  {
+    "file": "C:\\Users\\graph\\Desktop\\UB-Timebomb-Detector\\eval/cve_cases/cve_2018_6789.c",
+    "expected": "signed_overflow",
+    "detected": true,
+    "found_categories": [
+      "signed_overflow"
+    ],
+    "total_findings": 1
   }
 ]
