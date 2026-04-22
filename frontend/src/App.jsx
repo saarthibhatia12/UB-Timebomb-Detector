@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAnalysis } from './hooks/useAnalysis';
+import { buildFindingKey, useAIExplain } from './hooks/useAIExplain';
 import Header from './components/Header';
 import StatsBar from './components/StatsBar';
 import SourceViewer from './components/SourceViewer';
@@ -10,6 +11,14 @@ import CVEDatabase from './components/CVEDatabase';
 
 function App() {
   const { report, loading, error, analyze, reset } = useAnalysis();
+  const {
+    explanationsByKey,
+    errorsByKey,
+    loadingKey,
+    aiExplainStatus,
+    explainFinding,
+    resetAIExplain,
+  } = useAIExplain();
   const [sourceCode, setSourceCode] = useState('');
   const [selectedFinding, setSelectedFinding] = useState(null);
 
@@ -42,6 +51,7 @@ function App() {
     if (!sourceCode.trim()) return;
     try {
       const result = await analyze(sourceCode, detectFilename(sourceCode));
+      resetAIExplain();
       if (result.findings.length > 0) {
         setSelectedFinding(result.findings[0]);
       } else {
@@ -56,7 +66,22 @@ function App() {
     reset();
     setSourceCode('');
     setSelectedFinding(null);
+    resetAIExplain();
   };
+
+  const handleRequestAIExplain = async (finding) => {
+    try {
+      await explainFinding(finding);
+    } catch (e) {
+      // Hook stores per-finding error state.
+    }
+  };
+
+  const selectedFindingKey = buildFindingKey(selectedFinding);
+  const selectedAIExplanation = selectedFindingKey ? explanationsByKey[selectedFindingKey] : null;
+  const selectedAIExplanationError = selectedFindingKey ? errorsByKey[selectedFindingKey] : '';
+  const selectedAIExplanationLoading =
+    Boolean(selectedFindingKey) && loadingKey === selectedFindingKey;
 
   const handleLoadCVE = (code) => {
     setSourceCode(code);
@@ -98,7 +123,15 @@ function App() {
                 selectedFinding={selectedFinding}
                 onSelectFinding={setSelectedFinding}
               />
-              <ReportPanel finding={selectedFinding} report={report} />
+              <ReportPanel
+                finding={selectedFinding}
+                report={report}
+                aiExplain={selectedAIExplanation}
+                aiExplainLoading={selectedAIExplanationLoading}
+                aiExplainError={selectedAIExplanationError}
+                aiExplainStatus={aiExplainStatus}
+                onRequestAIExplain={handleRequestAIExplain}
+              />
             </div>
           </main>
         </div>

@@ -107,6 +107,38 @@ Expected output:
 uvicorn backend.main:app --reload --port 8000
 ```
 
+### Enable AI Explanations (Groq)
+
+AI explanations are generated **per finding** and fetched **on demand** from the UI.
+If `GROQ_API_KEY` is not set, the app still runs normally and the AI button is disabled with a local setup message.
+The backend automatically loads variables from the root `.env` file, so you only need to edit it once.
+
+Set these environment variables before starting the backend:
+
+- `GROQ_API_KEY` (required)
+- `GROQ_MODEL` (optional, default: `llama-3.3-70b-versatile`)
+- `GROQ_FALLBACK_MODEL` (optional, default: `llama-3.1-8b-instant`)
+- `GROQ_TIMEOUT_SECS` (optional, default: `25`)
+- `AI_EXPLAIN_MAX_CHARS` (optional, default: `12000`)
+
+Deprecated `llama3-70b-8192` and `llama3-8b-8192` values are automatically mapped to the current supported replacements.
+
+PowerShell example:
+
+```powershell
+$env:GROQ_API_KEY = "<your-key>"
+$env:GROQ_MODEL = "llama-3.3-70b-versatile"
+$env:GROQ_FALLBACK_MODEL = "llama-3.1-8b-instant"
+$env:GROQ_TIMEOUT_SECS = "25"
+$env:AI_EXPLAIN_MAX_CHARS = "12000"
+uvicorn backend.main:app --reload --port 8000
+```
+
+Privacy note:
+
+- Generating AI explanations sends selected finding data, source snippet excerpts, and IR diff excerpts to Groq.
+- Do not use this feature with sensitive code unless that data-sharing is acceptable for your environment.
+
 ### Analyze Code via API
 
 ```powershell
@@ -200,6 +232,53 @@ Analyze an existing `.c` file by path.
 ```json
 {"file_path": "test_cases/signed_overflow.c"}
 ```
+
+### `GET /ai-explain/contract`
+Returns the stable AI explanation schema envelope used by the frontend scaffold.
+
+### `POST /ai-explain`
+Generate an AI explanation for a single selected finding.
+
+**Request:**
+```json
+{
+  "finding": {
+    "function": "f",
+    "readable_name": "f",
+    "category": "signed_overflow",
+    "severity": "critical",
+    "confidence": "HIGH",
+    "detail": "...",
+    "fix": "...",
+    "metrics": {"blocks_O0": 2, "blocks_O2": 1},
+    "ir": {"O0": "...", "O2": "..."},
+    "source_snippet": "..."
+  },
+  "source_snippet": "optional override snippet"
+}
+```
+
+**Response:**
+```json
+{
+  "model": "llama-3.3-70b-versatile",
+  "explanation": {
+    "summary_plain": "...",
+    "what_is_the_ub": "...",
+    "what_changed_in_ir": "...",
+    "why_optimizer_removed_code": "...",
+    "fixes": ["..."],
+    "safer_rewrite": "...",
+    "caveats": "..."
+  }
+}
+```
+
+Common failure responses:
+
+- `503` when AI is not configured (`GROQ_API_KEY` missing or invalid config).
+- `400` when the payload is too large.
+- `429` when Groq rate limits are hit.
 
 ---
 

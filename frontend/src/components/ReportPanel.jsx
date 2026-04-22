@@ -1,6 +1,14 @@
-import { Download, Wrench, Info, BarChart3 } from 'lucide-react';
+import { Download, Wrench, Info, BarChart3, Sparkles, Loader2 } from 'lucide-react';
 
-export default function ReportPanel({ finding, report }) {
+export default function ReportPanel({
+  finding,
+  report,
+  aiExplain,
+  aiExplainLoading = false,
+  aiExplainError = '',
+  aiExplainStatus = { loading: false, enabled: false, reason: '' },
+  onRequestAIExplain,
+}) {
   if (!finding) {
     return (
       <div className="glass-card p-6">
@@ -11,12 +19,16 @@ export default function ReportPanel({ finding, report }) {
   }
 
   const metrics = finding.metrics || {};
+  const aiDetails = aiExplain?.explanation || null;
+  const aiConfigReady = Boolean(aiExplainStatus?.enabled);
+  const aiConfigLoading = Boolean(aiExplainStatus?.loading);
+  const aiConfigReason = aiExplainStatus?.reason || '';
 
   const handleExport = () => {
     if (!report) return;
 
     const lines = [];
-    lines.push('=' .repeat(60));
+    lines.push('='.repeat(60));
     lines.push('  UB TIME BOMB DETECTOR — ANALYSIS REPORT');
     lines.push('='.repeat(60));
     lines.push(`  File: ${report.source_file}`);
@@ -27,7 +39,7 @@ export default function ReportPanel({ finding, report }) {
 
     for (const [i, f] of report.findings.entries()) {
       lines.push('');
-      lines.push(`[${f.severity_icon} ${f.severity.toUpperCase()}] #${i+1} — ${f.readable_name}`);
+      lines.push(`[${f.severity_icon} ${f.severity.toUpperCase()}] #${i + 1} — ${f.readable_name}`);
       lines.push(`  Category  : ${f.category}`);
       lines.push(`  Confidence: ${f.confidence}`);
       if (f.location) {
@@ -53,6 +65,13 @@ export default function ReportPanel({ finding, report }) {
     URL.revokeObjectURL(url);
   };
 
+  const handleRequestExplain = () => {
+    if (!onRequestAIExplain || aiExplainLoading) {
+      return;
+    }
+    onRequestAIExplain(finding);
+  };
+
   return (
     <div className="glass-card overflow-hidden">
       <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
@@ -71,7 +90,6 @@ export default function ReportPanel({ finding, report }) {
       </div>
 
       <div className="p-4 space-y-4 max-h-[400px] overflow-auto">
-        {/* Detail */}
         <div>
           <div className="flex items-center gap-1.5 mb-1.5">
             <Info className="w-3.5 h-3.5 text-accent-blue" />
@@ -82,7 +100,6 @@ export default function ReportPanel({ finding, report }) {
           </p>
         </div>
 
-        {/* Fix suggestion */}
         <div>
           <div className="flex items-center gap-1.5 mb-1.5">
             <Wrench className="w-3.5 h-3.5 text-accent-green" />
@@ -95,7 +112,71 @@ export default function ReportPanel({ finding, report }) {
           </div>
         </div>
 
-        {/* Metrics */}
+        <div>
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-accent-blue" />
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">AI Explanation</span>
+          </div>
+          <div className="pl-5 space-y-2">
+            <p className="text-[11px] text-gray-500">This sends code and IR excerpts to Groq.</p>
+            {!aiConfigLoading && !aiConfigReady && aiConfigReason && (
+              <p className="text-[11px] text-accent-orange">{aiConfigReason}</p>
+            )}
+            <button
+              onClick={handleRequestExplain}
+              disabled={aiExplainLoading || aiConfigLoading || !aiConfigReady}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-gray-300 hover:text-white bg-dark-700/50 hover:bg-dark-600/70 border border-dark-500/40 rounded-md transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {aiExplainLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+              {aiConfigLoading
+                ? 'Checking AI Configuration...'
+                : !aiConfigReady
+                  ? 'AI Disabled'
+                  : aiDetails
+                    ? 'Explanation Ready'
+                    : 'Generate AI Explanation'}
+            </button>
+
+            {aiConfigLoading && (
+              <p className="text-xs text-gray-500">Checking whether Groq is configured locally...</p>
+            )}
+
+            {aiExplainLoading && (
+              <p className="text-xs text-gray-500">Generating AI explanation for this finding...</p>
+            )}
+
+            {aiExplainError && aiConfigReady && (
+              <p className="text-xs text-accent-orange">{aiExplainError}</p>
+            )}
+
+            {aiDetails && aiConfigReady && (
+              <div className="space-y-2 p-3 bg-accent-blue/5 border border-accent-blue/15 rounded-lg">
+                {aiExplain?.model && (
+                  <p className="text-[11px] font-mono text-gray-500">Model: {aiExplain.model}</p>
+                )}
+                <ExplanationRow label="Summary" value={aiDetails.summary_plain} />
+                <ExplanationRow label="What is the UB" value={aiDetails.what_is_the_ub} />
+                <ExplanationRow label="IR change" value={aiDetails.what_changed_in_ir} />
+                <ExplanationRow label="Why optimizer changed code" value={aiDetails.why_optimizer_removed_code} />
+                <ExplanationRow
+                  label="Suggested fixes"
+                  value={Array.isArray(aiDetails.fixes) ? aiDetails.fixes.join(' | ') : ''}
+                />
+                <ExplanationRow label="Safer rewrite" value={aiDetails.safer_rewrite} />
+                <ExplanationRow label="Caveats" value={aiDetails.caveats} />
+              </div>
+            )}
+
+            {!aiConfigLoading && !aiConfigReady && !aiDetails && (
+              <p className="text-xs text-gray-500">AI explanations are disabled until GROQ_API_KEY is set.</p>
+            )}
+
+            {!aiDetails && !aiExplainLoading && !aiExplainError && aiConfigReady && (
+              <p className="text-xs text-gray-500">No AI explanation generated yet for this selected finding.</p>
+            )}
+          </div>
+        </div>
+
         {metrics.blocks_O0 !== undefined && (
           <div>
             <div className="flex items-center gap-1.5 mb-2">
@@ -119,6 +200,19 @@ export default function ReportPanel({ finding, report }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function ExplanationRow({ label, value }) {
+  if (!value) {
+    return null;
+  }
+
+  return (
+    <div>
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{label}</p>
+      <p className="text-sm text-gray-300 leading-relaxed">{value}</p>
     </div>
   );
 }
