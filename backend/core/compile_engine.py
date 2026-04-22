@@ -5,6 +5,7 @@ Compiles a C source file at -O0 and -O2 and captures LLVM IR per function.
 """
 
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -36,6 +37,55 @@ SKIP_FUNCTIONS = frozenset(
 CPP_EXTENSIONS = frozenset({".cpp", ".cc", ".cxx", ".C", ".c++"})
 
 
+# Map common missing standard symbols/types to their canonical headers.
+STANDARD_SYMBOL_HEADER_MAP = {
+    # stddef.h
+    "NULL": "stddef.h",
+    "size_t": "stddef.h",
+    "ptrdiff_t": "stddef.h",
+    "wchar_t": "stddef.h",
+    "max_align_t": "stddef.h",
+    "offsetof": "stddef.h",
+    # stdbool.h
+    "bool": "stdbool.h",
+    "true": "stdbool.h",
+    "false": "stdbool.h",
+    # stdlib.h
+    "EXIT_SUCCESS": "stdlib.h",
+    "EXIT_FAILURE": "stdlib.h",
+    "RAND_MAX": "stdlib.h",
+    # limits.h
+    "CHAR_BIT": "limits.h",
+    "INT_MAX": "limits.h",
+    "INT_MIN": "limits.h",
+    "UINT_MAX": "limits.h",
+    "LONG_MAX": "limits.h",
+    "LONG_MIN": "limits.h",
+    "ULONG_MAX": "limits.h",
+    "LLONG_MAX": "limits.h",
+    "LLONG_MIN": "limits.h",
+    "ULLONG_MAX": "limits.h",
+    # stdint.h
+    "SIZE_MAX": "stdint.h",
+    "INT8_MAX": "stdint.h",
+    "INT16_MAX": "stdint.h",
+    "INT32_MAX": "stdint.h",
+    "INT64_MAX": "stdint.h",
+    "UINT8_MAX": "stdint.h",
+    "UINT16_MAX": "stdint.h",
+    "UINT32_MAX": "stdint.h",
+    "UINT64_MAX": "stdint.h",
+}
+
+MISSING_SYMBOL_RE = re.compile(
+    r"error:\s+(?:use of undeclared identifier|unknown type name)\s+'([^']+)'"
+)
+MISSING_HEADER_RE = re.compile(r"(?:fatal\s+)?error:\s+'([^']+)'\s+file not found")
+STDINT_TYPE_RE = re.compile(
+    r"(?:u?int(?:8|16|32|64|max|ptr)_t|(?:int|uint)(?:_fast|least)(?:8|16|32|64)_t|intptr_t|uintptr_t)"
+)
+
+
 def _is_cpp_file(source_path: str) -> bool:
     """Check if a source file is C++ based on its extension."""
     _, ext = os.path.splitext(source_path)
@@ -57,14 +107,58 @@ def _resolve_clang(cpp: bool = False) -> str:
     return name
 
 
-def _run_clang(
-    source_path: str, opt_level: int, output_path: str,
-    cpp: bool = False, timeout: int = 30,
-) -> str:
-    """
-    Run clang/clang++ to emit LLVM IR at the given optimization level.
-    Returns stderr output (warnings/errors).
-    """
+def _detect_missing_standard_headers(stderr_text: str) -> list[str]:
+    """Infer likely missing standard headers from clang diagnostics."""
+    headers: set[str] = set()
+
+    for symbol in MISSING_SYMBOL_RE.findall(stderr_text):
+        mapped = STANDARD_SYMBOL_HEADER_MAP.get(symbol)
+        if mapped:
+            headers.add(mapped)
+            continue
+
+        if STDINT_TYPE_RE.fullmatch(symbol):
+            headers.add("stdint.h")
+
+    return sorted(headers)
+
+
+def _detect_missing_header_files(stderr_text: str) -> list[str]:
+    """Extract missing header file names from clang diagnostics."""
+    return sorted(set(MISSING_HEADER_RE.findall(stderr_text)))
+
+
+def _compat_headers_dir() -> str:
+    """Path to project-local compatibility headers."""
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "compat_headers"))
+
+
+def _has_compat_headers(header_names: list[str]) -> bool:
+    """Check whether all requested headers exist in compat header directory."""
+    compat_dir = _compat_headers_dir()
+    if not os.path.isdir(compat_dir):
+        return False
+
+    for header_name in header_names:
+        if os.path.isabs(header_name):
+            return False
+        if os.path.normpath(header_name).startswith(".."):
+            return False
+        if not os.path.exists(os.path.join(compat_dir, header_name)):
+            return False
+
+    return True
+
+
+def _build_clang_cmd(
+    source_path: str,
+    opt_level: int,
+    output_path: str,
+    cpp: bool = False,
+    forced_includes: Optional[list[str]] = None,
+    include_dirs: Optional[list[str]] = None,
+) -> list[str]:
+    """Build clang/clang++ command line with optional forced includes."""
     cmd = [
         _resolve_clang(cpp=cpp),
         f"-O{opt_level}",
@@ -74,9 +168,38 @@ def _run_clang(
         "-S",
         "-Wno-everything",
     ]
+
+    if forced_includes:
+        for header in forced_includes:
+            cmd.extend(["-include", header])
+
+    if include_dirs:
+        for include_dir in include_dirs:
+            cmd.extend(["-I", include_dir])
+
     if cpp:
         cmd.append("-std=c++17")
+
     cmd.extend(["-o", output_path, source_path])
+    return cmd
+
+
+def _run_clang(
+    source_path: str, opt_level: int, output_path: str,
+    cpp: bool = False, timeout: int = 30,
+) -> str:
+    """
+    Run clang/clang++ to emit LLVM IR at the given optimization level.
+    Returns stderr output (warnings/errors).
+    """
+    active_include_dirs: list[str] = []
+    cmd = _build_clang_cmd(
+        source_path,
+        opt_level,
+        output_path,
+        cpp=cpp,
+        include_dirs=active_include_dirs,
+    )
 
     try:
         result = subprocess.run(
@@ -91,7 +214,67 @@ def _run_clang(
         raise CompilationError("Clang not found. Install LLVM: winget install LLVM.LLVM") from exc
 
     if result.returncode != 0:
-        raise CompilationError(f"Clang failed at -O{opt_level}:\n{result.stderr}")
+        missing_headers = _detect_missing_header_files(result.stderr)
+        if missing_headers and _has_compat_headers(missing_headers):
+            active_include_dirs = [_compat_headers_dir()]
+            header_retry_cmd = _build_clang_cmd(
+                source_path,
+                opt_level,
+                output_path,
+                cpp=cpp,
+                include_dirs=active_include_dirs,
+            )
+            try:
+                header_retry = subprocess.run(
+                    header_retry_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise CompilationError(
+                    f"Clang retry timed out after {timeout}s at -O{opt_level}"
+                ) from exc
+
+            if header_retry.returncode == 0:
+                result = header_retry
+            else:
+                result = header_retry
+
+    if result.returncode != 0:
+        fallback_headers = _detect_missing_standard_headers(result.stderr)
+        if fallback_headers:
+            retry_cmd = _build_clang_cmd(
+                source_path,
+                opt_level,
+                output_path,
+                cpp=cpp,
+                forced_includes=fallback_headers,
+                include_dirs=active_include_dirs,
+            )
+            try:
+                retry_result = subprocess.run(
+                    retry_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise CompilationError(
+                    f"Clang retry timed out after {timeout}s at -O{opt_level}"
+                ) from exc
+
+            if retry_result.returncode == 0:
+                result = retry_result
+            else:
+                headers_str = ", ".join(fallback_headers)
+                raise CompilationError(
+                    f"Clang failed at -O{opt_level}:\n{result.stderr}\n"
+                    f"Retry with auto-includes ({headers_str}) also failed:\n"
+                    f"{retry_result.stderr}"
+                )
+        else:
+            raise CompilationError(f"Clang failed at -O{opt_level}:\n{result.stderr}")
 
     if not os.path.exists(output_path):
         raise CompilationError(f"Clang produced no output at -O{opt_level}: {output_path}")

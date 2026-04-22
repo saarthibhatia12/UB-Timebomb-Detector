@@ -67,3 +67,38 @@ def test_main_filtered(tmp_c_file):
     result = compile_both(path)
     assert "main" not in result["functions"]
     assert "helper" in result["functions"]
+
+
+def test_auto_include_for_null_symbol(tmp_c_file):
+    """Missing NULL include should be recovered via standard-header retry."""
+    path = tmp_c_file(
+        "int interprocedural_bomb(int *user_input_ptr) {\n"
+        "    if (user_input_ptr == NULL) return -1;\n"
+        "    return 0;\n"
+        "}\n"
+    )
+    result = compile_both(path)
+    assert "interprocedural_bomb" in result["functions"]
+
+
+def test_auto_include_for_stdint_type(tmp_c_file):
+    """Missing stdint include should be recovered for fixed-width integer types."""
+    path = tmp_c_file(
+        "uint32_t add_one(uint32_t x) {\n"
+        "    return x + 1;\n"
+        "}\n"
+    )
+    result = compile_both(path)
+    assert "add_one" in result["functions"]
+
+
+def test_missing_stdio_header_fallback(tmp_c_file):
+    """Missing stdio.h should compile via compat headers when toolchain headers are absent."""
+    path = tmp_c_file(
+        "#include <stdio.h>\n"
+        "int emit(int v) {\n"
+        "    return printf(\"%d\\n\", v);\n"
+        "}\n"
+    )
+    result = compile_both(path)
+    assert "emit" in result["functions"]

@@ -17,7 +17,7 @@ function App() {
   const detectFilename = (code) => {
     const cppSignals = [
       /^\s*#include\s*<(iostream|string|vector|map|set|algorithm|memory|cstdlib|cstdio|cstring|cmath|fstream|sstream|array|deque|list|queue|stack|unordered_map|unordered_set|functional|numeric|chrono|thread|mutex|regex|tuple|variant|optional|any|filesystem|ranges|concepts|coroutine|format|expected|span|bitset|complex|ratio|random|limits|climits|cfloat|cassert|ctime|cstddef|cstdint|type_traits|utility|initializer_list|typeindex|typeinfo|stdexcept|exception|new|csignal|csetjmp|cstdarg|cerrno|cctype|cwchar|cwctype|cfenv|cinttypes|cuchar|codecvt|locale|iterator|execution)>/m,
-      /^\s*#include\s*<.+\.h(pp)?>/m,
+      /^\s*#include\s*[<"][^>"]+\.(hpp|hxx|hh)[>"]/m,
       /\bstd::/,
       /\bcout\b/,
       /\bcerr\b/,
