@@ -33,36 +33,50 @@ SKIP_FUNCTIONS = frozenset(
 )
 
 
-def _resolve_clang() -> str:
-    """Resolve clang executable name/path for current platform."""
-    found = shutil.which("clang")
+CPP_EXTENSIONS = frozenset({".cpp", ".cc", ".cxx", ".C", ".c++"})
+
+
+def _is_cpp_file(source_path: str) -> bool:
+    """Check if a source file is C++ based on its extension."""
+    _, ext = os.path.splitext(source_path)
+    return ext in CPP_EXTENSIONS
+
+
+def _resolve_clang(cpp: bool = False) -> str:
+    """Resolve clang/clang++ executable name/path for current platform."""
+    name = "clang++" if cpp else "clang"
+    found = shutil.which(name)
     if found:
         return found
 
-    windows_default = r"C:\Program Files\LLVM\bin\clang.exe"
+    exe = f"{name}.exe"
+    windows_default = rf"C:\Program Files\LLVM\bin\{exe}"
     if os.name == "nt" and os.path.exists(windows_default):
         return windows_default
 
-    return "clang"
+    return name
 
 
-def _run_clang(source_path: str, opt_level: int, output_path: str, timeout: int = 30) -> str:
+def _run_clang(
+    source_path: str, opt_level: int, output_path: str,
+    cpp: bool = False, timeout: int = 30,
+) -> str:
     """
-    Run clang to emit LLVM IR at the given optimization level.
+    Run clang/clang++ to emit LLVM IR at the given optimization level.
     Returns stderr output (warnings/errors).
     """
     cmd = [
-        _resolve_clang(),
+        _resolve_clang(cpp=cpp),
         f"-O{opt_level}",
         "-g",
         "-fno-inline",
         "-emit-llvm",
         "-S",
         "-Wno-everything",
-        "-o",
-        output_path,
-        source_path,
     ]
+    if cpp:
+        cmd.append("-std=c++17")
+    cmd.extend(["-o", output_path, source_path])
 
     try:
         result = subprocess.run(
@@ -118,8 +132,9 @@ def compile_both(source_path: str, work_dir: Optional[str] = None, keep_ir: bool
     o0_path = os.path.join(work_dir, f"{base}_O0.ll")
     o2_path = os.path.join(work_dir, f"{base}_O2.ll")
 
-    _run_clang(source_path, 0, o0_path)
-    _run_clang(source_path, 2, o2_path)
+    cpp = _is_cpp_file(source_path)
+    _run_clang(source_path, 0, o0_path, cpp=cpp)
+    _run_clang(source_path, 2, o2_path, cpp=cpp)
 
     o0_funcs = parse_ir_by_function(o0_path)
     o2_funcs = parse_ir_by_function(o2_path)

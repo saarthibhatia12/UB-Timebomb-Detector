@@ -49,14 +49,18 @@ class AnalyzeFileRequest(BaseModel):
     file_path: str
 
 
-def _safe_filename(name: Optional[str]) -> str:
+C_CPP_EXTENSIONS = {".c", ".cpp", ".cc", ".cxx", ".C", ".c++"}
+
+
+def _safe_filename(name: str | None) -> str:
     """Normalize user-supplied filename to a safe local basename."""
     fallback = "input.c"
     raw = (name or fallback).strip()
     base = os.path.basename(raw)
     if not base:
         return fallback
-    if not base.endswith(".c"):
+    _, ext = os.path.splitext(base)
+    if ext not in C_CPP_EXTENSIONS:
         base = f"{base}.c"
     return base
 
@@ -106,8 +110,9 @@ async def analyze_file(request: AnalyzeFileRequest) -> dict:
 
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
-    if not file_path.endswith(".c"):
-        raise HTTPException(status_code=400, detail="Only .c files are supported")
+    _, ext = os.path.splitext(file_path)
+    if ext not in C_CPP_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Only C/C++ files are supported (.c, .cpp, .cc, .cxx)")
 
     try:
         compiled = compile_both(file_path, keep_ir=True)

@@ -72,7 +72,7 @@ export default function Header({ sourceCode, onSourceChange, onAnalyze, loading,
               className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-300 bg-dark-700/60 hover:bg-dark-600/80 border border-dark-500/40 rounded-lg transition-all duration-200 hover:text-white cursor-pointer"
             >
               <Upload className="w-3.5 h-3.5" />
-              Upload .c
+              Upload File
             </button>
 
             {onReset && (
@@ -116,7 +116,7 @@ export default function Header({ sourceCode, onSourceChange, onAnalyze, loading,
                 onAnalyze();
               }
             }}
-            placeholder="// Paste your C code here, or upload a .c file...&#10;// Press Ctrl+Enter to analyze"
+            placeholder="// Paste your C/C++ code here, or upload a file...&#10;// Press Ctrl+Enter to analyze"
             className="w-full h-40 p-4 font-mono text-sm text-gray-200 bg-dark-900/80 border border-dark-600/50 rounded-xl resize-none focus:outline-none focus:border-accent-blue/40 focus:ring-1 focus:ring-accent-blue/20 transition-all duration-200 placeholder:text-gray-600"
             spellCheck={false}
           />

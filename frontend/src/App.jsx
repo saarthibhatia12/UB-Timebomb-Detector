@@ -13,10 +13,35 @@ function App() {
   const [sourceCode, setSourceCode] = useState('');
   const [selectedFinding, setSelectedFinding] = useState(null);
 
+  // Auto-detect C++ code from common includes/keywords
+  const detectFilename = (code) => {
+    const cppSignals = [
+      /^\s*#include\s*<(iostream|string|vector|map|set|algorithm|memory|cstdlib|cstdio|cstring|cmath|fstream|sstream|array|deque|list|queue|stack|unordered_map|unordered_set|functional|numeric|chrono|thread|mutex|regex|tuple|variant|optional|any|filesystem|ranges|concepts|coroutine|format|expected|span|bitset|complex|ratio|random|limits|climits|cfloat|cassert|ctime|cstddef|cstdint|type_traits|utility|initializer_list|typeindex|typeinfo|stdexcept|exception|new|csignal|csetjmp|cstdarg|cerrno|cctype|cwchar|cwctype|cfenv|cinttypes|cuchar|codecvt|locale|iterator|execution)>/m,
+      /^\s*#include\s*<.+\.h(pp)?>/m,
+      /\bstd::/,
+      /\bcout\b/,
+      /\bcerr\b/,
+      /\bcin\b/,
+      /\bclass\s+\w+/,
+      /\bnamespace\s+\w+/,
+      /\btemplate\s*</,
+      /\breinterpret_cast</,
+      /\bstatic_cast</,
+      /\bdynamic_cast</,
+      /\bconst_cast</,
+      /\bnew\s+\w+/,
+      /\bdelete\s+/,
+      /\bvirtual\s+/,
+      /\bnullptr\b/,
+    ];
+    const isCpp = cppSignals.some(re => re.test(code));
+    return isCpp ? 'input.cpp' : 'input.c';
+  };
+
   const handleAnalyze = async () => {
     if (!sourceCode.trim()) return;
     try {
-      const result = await analyze(sourceCode);
+      const result = await analyze(sourceCode, detectFilename(sourceCode));
       if (result.findings.length > 0) {
         setSelectedFinding(result.findings[0]);
       } else {
