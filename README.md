@@ -62,17 +62,20 @@ clang --version
 winget install LLVM.LLVM
 ```
 
-### Install
+### Build (Install Dependencies)
 
-```powershell
-cd "UB-Timebomb-Detector"
-pip install -r requirements.txt
+```bash
+cd UB-Timebomb-Detector
+chmod +x build.sh run.sh
+./build.sh
 ```
+
+This creates a `venv/` virtual environment and installs all dependencies from `requirements.txt`.
 
 ### Run the Evaluation Suite
 
-```powershell
-python eval/run_evaluation.py
+```bash
+./run.sh
 ```
 
 Expected output:
@@ -101,10 +104,16 @@ Expected output:
 ============================================================
 ```
 
+### Analyze a Single File
+
+```bash
+./run.sh test_cases/signed_overflow.c
+```
+
 ### Start the API Server
 
-```powershell
-uvicorn backend.main:app --reload --port 8000
+```bash
+./run.sh --server
 ```
 
 ### Enable AI Explanations (Groq)
@@ -286,9 +295,15 @@ Common failure responses:
 
 ```
 UB-Timebomb-Detector/
-├── README.md
+├── README.md                    ← This file (what + how to run)
+├── DESIGN.md                    ← Approach + alternatives
+├── IMPLEMENTATION.md            ← LLVM IR details
+├── EVALUATION.md                ← Metrics + comparison + test cases
+│
+├── build.sh                     ← Build script (install deps)
+├── run.sh                       ← Run script (eval / analyze / server)
+│
 ├── requirements.txt
-├── implementation_plan.md
 │
 ├── backend/
 │   ├── main.py                  ← FastAPI server
@@ -296,7 +311,8 @@ UB-Timebomb-Detector/
 │   │   ├── compile_engine.py    ← Differential compilation (O0 vs O2)
 │   │   ├── change_detector.py   ← IR structural diff analysis
 │   │   ├── ub_classifier.py     ← UB pattern classification
-│   │   └── report_generator.py  ← JSON/text report generation
+│   │   ├── report_generator.py  ← JSON/text report generation
+│   │   └── env_loader.py        ← .env variable loading
 │   └── utils/
 │       ├── ir_parser.py         ← LLVM IR parsing & pattern matching
 │       └── demangle.py          ← C++ name demangling
@@ -310,7 +326,13 @@ UB-Timebomb-Detector/
 │
 └── eval/
     ├── run_evaluation.py        ← Batch test runner
-    └── evaluation_results.json  ← Latest results
+    ├── evaluation_results.json  ← Latest results
+    └── cve_cases/               ← 5 CVE reproducer test cases
+        ├── gcc_bug_30475.c
+        ├── cve_2009_1897.c
+        ├── cve_2017_9798.c
+        ├── cve_2014_3153.c
+        └── cve_2018_6789.c
 ```
 
 ---
