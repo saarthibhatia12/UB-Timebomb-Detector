@@ -1,3 +1,4 @@
+
 #!/usr/bin/env bash
 # run.sh — Run the UB Time Bomb Detector evaluation suite
 # Usage:

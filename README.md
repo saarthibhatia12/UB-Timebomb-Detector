@@ -1,6 +1,36 @@
-# ⚠️ UB Time Bomb Detector
+# UB Time Bomb Detector
 
 A static analysis tool that detects **undefined behavior (UB) time bombs** in C/C++ code by comparing LLVM IR generated at `-O0` vs `-O2`. When the optimizer exploits UB assumptions to eliminate branches, remove null checks, or fold computations, this tool catches it — before it blows up in production.
+
+---
+
+## Demo / Screenshots
+
+### Full Application
+
+![Full Application](./screenshots/FULL%20APP%20SS.png)
+
+### Source Code Example
+
+![Source Code Example](./screenshots/SourceCodeofEgTestCase.png)
+
+### LLVM IR Diff View
+
+![LLVM IR Diff](./screenshots/LLVM%20IR%20DIFF.png)
+
+### AI-Powered Analysis
+
+![AI Analysis](./screenshots/AI-ANALYSIS.png)
+
+### CVE Reproducer Test Cases
+
+![CVE Reproducers](./screenshots/CVE-REPRODUCERS.png)
+
+### Failure Case — Out-of-Bounds Buffer Access (Not Detected)
+
+This is UB (writing past array bounds) but the tool correctly does not flag it — buffer overflow is outside the tool's 4 UB categories. The optimizer does not exploit this at the IR level, so no O0/O2 diff is produced.
+
+![Failure Case](./screenshots/FAILURE%20TEST%20CASE.png)
 
 ---
 
@@ -40,10 +70,10 @@ Source Code (.c)
 
 | Category | Severity | Detection Method |
 |---|---|---|
-| **Signed Integer Overflow** | 🔴 Critical | `nsw` flag + branch elimination, or signed add/compare folded to constant |
-| **Null Pointer Dereference** | 🔴 Critical | Null check present at O0, removed at O2 |
-| **Strict Aliasing Violation** | 🟠 High | Type-punned store/load with load eliminated at O2 |
-| **Uninitialized Variable Use** | 🟠 High | `alloca` without store + `undef` exposure at O2 |
+| **Signed Integer Overflow** | Critical | `nsw` flag + branch elimination, or signed add/compare folded to constant |
+| **Null Pointer Dereference** | Critical | Null check present at O0, removed at O2 |
+| **Strict Aliasing Violation** | High | Type-punned store/load with load eliminated at O2 |
+| **Uninitialized Variable Use** | High | `alloca` without store + `undef` exposure at O2 |
 
 ---
 
@@ -64,8 +94,13 @@ winget install LLVM.LLVM
 
 ### Build (Install Dependencies)
 
+**Windows (PowerShell):**
+```powershell
+.\build.ps1
+```
+
+**Linux/macOS/WSL:**
 ```bash
-cd UB-Timebomb-Detector
 chmod +x build.sh run.sh
 ./build.sh
 ```
@@ -74,114 +109,87 @@ This creates a `venv/` virtual environment and installs all dependencies from `r
 
 ### Run the Evaluation Suite
 
+**Windows (PowerShell):**
+```powershell
+.\run.ps1
+```
+
+**Linux/macOS/WSL:**
 ```bash
 ./run.sh
 ```
 
-Expected output:
+Expected output (all 10 test cases detected):
 ```
 ============================================================
-  UB TIME BOMB DETECTOR — EVALUATION RUN
+  CORE TEST CASES
 ============================================================
-
 --- test_cases/signed_overflow.c (expected: signed_overflow) ---
   Result: CAUGHT
-
 --- test_cases/null_deref.c (expected: null_deref) ---
   Result: CAUGHT
-
 --- test_cases/strict_aliasing.c (expected: strict_aliasing) ---
   Result: CAUGHT
-
 --- test_cases/uninitialized.c (expected: uninitialized_use) ---
   Result: CAUGHT
-
 --- test_cases/loop_overflow.c (expected: signed_overflow) ---
   Result: CAUGHT
+  CORE TEST CASES RESULT: 5/5 detected
 
 ============================================================
-  SUMMARY: 5/5 test cases detected
+  CVE REPRODUCERS
+============================================================
+--- eval/cve_cases/gcc_bug_30475.c (expected: signed_overflow) ---
+  Result: CAUGHT
+--- eval/cve_cases/cve_2009_1897.c (expected: null_deref) ---
+  Result: CAUGHT
+--- eval/cve_cases/cve_2017_9798.c (expected: uninitialized_use) ---
+  Result: CAUGHT
+--- eval/cve_cases/cve_2014_3153.c (expected: signed_overflow) ---
+  Result: CAUGHT
+--- eval/cve_cases/cve_2018_6789.c (expected: signed_overflow) ---
+  Result: CAUGHT
+  CVE REPRODUCERS RESULT: 5/5 detected
+
+============================================================
+  OVERALL SUMMARY: 10/10 test cases detected
+  Core: 5/5  |  CVE: 5/5
 ============================================================
 ```
 
 ### Analyze a Single File
 
+**Windows (PowerShell):**
+```powershell
+.\run.ps1 test_cases\signed_overflow.c
+```
+
+**Linux/macOS/WSL:**
 ```bash
 ./run.sh test_cases/signed_overflow.c
 ```
 
-### Start the API Server
+### Run the Full Application (Frontend + Backend)
 
-```bash
-./run.sh --server
-```
-
-### Enable AI Explanations (Groq)
-
-AI explanations are generated **per finding** and fetched **on demand** from the UI.
-If `GROQ_API_KEY` is not set, the app still runs normally and the AI button is disabled with a local setup message.
-The backend automatically loads variables from the root `.env` file, so you only need to edit it once.
-
-Set these environment variables before starting the backend:
-
-- `GROQ_API_KEY` (required)
-- `GROQ_MODEL` (optional, default: `llama-3.3-70b-versatile`)
-- `GROQ_FALLBACK_MODEL` (optional, default: `llama-3.1-8b-instant`)
-- `GROQ_TIMEOUT_SECS` (optional, default: `25`)
-- `AI_EXPLAIN_MAX_CHARS` (optional, default: `12000`)
-
-Deprecated `llama3-70b-8192` and `llama3-8b-8192` values are automatically mapped to the current supported replacements.
-
-PowerShell example:
-
+**Terminal 1 — Backend (API):**
 ```powershell
-$env:GROQ_API_KEY = "<your-key>"
-$env:GROQ_MODEL = "llama-3.3-70b-versatile"
-$env:GROQ_FALLBACK_MODEL = "llama-3.1-8b-instant"
-$env:GROQ_TIMEOUT_SECS = "25"
-$env:AI_EXPLAIN_MAX_CHARS = "12000"
-uvicorn backend.main:app --reload --port 8000
+.\run.ps1 --server
 ```
 
-Privacy note:
-
-- Generating AI explanations sends selected finding data, source snippet excerpts, and IR diff excerpts to Groq.
-- Do not use this feature with sensitive code unless that data-sharing is acceptable for your environment.
-
-### Analyze Code via API
-
+**Terminal 2 — Frontend (UI):**
 ```powershell
-# Health check
-Invoke-RestMethod http://localhost:8000/health
-
-# Analyze source code (PowerShell native)
-$body = @{
-    source_code = 'int f(int x) { return x + 1 > x; }'
-    filename = "test.c"
-} | ConvertTo-Json
-
-Invoke-RestMethod -Uri "http://localhost:8000/analyze" `
-  -Method POST -Body $body -ContentType "application/json"
+cd frontend
+npm install
+npm run dev
 ```
 
-Or with `curl.exe` (note the escaped quotes for PowerShell):
-```powershell
-curl.exe -X POST http://localhost:8000/analyze `
-  -H "Content-Type: application/json" `
-  -d "{\"source_code\": \"int f(int x) { return x + 1 > x; }\", \"filename\": \"test.c\"}"
-```
-
-### Analyze a File from Disk
-
-```powershell
-$body = @{ file_path = "test_cases/signed_overflow.c" } | ConvertTo-Json
-Invoke-RestMethod -Uri "http://localhost:8000/analyze-file" `
-  -Method POST -Body $body -ContentType "application/json"
-```
+Then open `http://localhost:5173` in your browser. The Vite dev server proxies `/api` requests to `http://localhost:8000`.
 
 ---
 
 ## Test Cases
+
+### Core Test Cases (5)
 
 | File | UB Type | What Happens |
 |---|---|---|
@@ -190,6 +198,20 @@ Invoke-RestMethod -Uri "http://localhost:8000/analyze-file" `
 | `strict_aliasing.c` | `float*` → `int*` punning | O2 returns stale/reinterpreted value |
 | `uninitialized.c` | `int x; return x+1;` | O2 propagates `undef`/poison |
 | `loop_overflow.c` | overflow guard in loop | O2 removes the `i+1 < 0` safety check |
+
+### CVE Reproducer Test Cases (5)
+
+| File | Bug | Category |
+|---|---|---|
+| `gcc_bug_30475.c` | GCC PR 30475 — signed overflow loop guard | signed_overflow |
+| `cve_2009_1897.c` | Linux kernel tun/tap null deref | null_deref |
+| `cve_2017_9798.c` | Apache Optionsbleed — uninitialized memory | uninitialized_use |
+| `cve_2014_3153.c` | Linux futex syscall integer overflow | signed_overflow |
+| `cve_2018_6789.c` | Exim base64 decode overflow | signed_overflow |
+
+### Known Scope Limitation
+
+The tool targets 4 specific UB categories that the optimizer exploits to produce measurable IR diffs. Other forms of UB (e.g., buffer overflow, use-after-free, division by zero) are **outside scope** — the optimizer does not produce an O0/O2 IR diff for these, so the tool correctly returns 0 findings.
 
 ---
 
@@ -209,31 +231,6 @@ Analyze C source code from request body.
 }
 ```
 
-**Response:**
-```json
-{
-  "source_file": "...",
-  "total_findings": 1,
-  "risk_score": 30,
-  "risk_level": "MEDIUM",
-  "category_counts": {"signed_overflow": 1},
-  "findings": [
-    {
-      "function": "f",
-      "readable_name": "f",
-      "category": "signed_overflow",
-      "severity": "critical",
-      "confidence": "HIGH",
-      "detail": "Signed add/compare at -O0 was folded to a constant...",
-      "fix": "Use unsigned arithmetic, or __builtin_add_overflow()...",
-      "location": {"file": "test.c", "line": 1},
-      "source_snippet": "...",
-      "metrics": { "blocks_O0": 2, "blocks_O2": 1, ... }
-    }
-  ]
-}
-```
-
 ### `POST /analyze-file`
 Analyze an existing `.c` file by path.
 
@@ -241,9 +238,6 @@ Analyze an existing `.c` file by path.
 ```json
 {"file_path": "test_cases/signed_overflow.c"}
 ```
-
-### `GET /ai-explain/contract`
-Returns the stable AI explanation schema envelope used by the frontend scaffold.
 
 ### `POST /ai-explain`
 Generate an AI explanation for a single selected finding.
@@ -253,41 +247,26 @@ Generate an AI explanation for a single selected finding.
 {
   "finding": {
     "function": "f",
-    "readable_name": "f",
     "category": "signed_overflow",
     "severity": "critical",
-    "confidence": "HIGH",
-    "detail": "...",
-    "fix": "...",
-    "metrics": {"blocks_O0": 2, "blocks_O2": 1},
-    "ir": {"O0": "...", "O2": "..."},
-    "source_snippet": "..."
-  },
-  "source_snippet": "optional override snippet"
-}
-```
-
-**Response:**
-```json
-{
-  "model": "llama-3.3-70b-versatile",
-  "explanation": {
-    "summary_plain": "...",
-    "what_is_the_ub": "...",
-    "what_changed_in_ir": "...",
-    "why_optimizer_removed_code": "...",
-    "fixes": ["..."],
-    "safer_rewrite": "...",
-    "caveats": "..."
+    ...
   }
 }
 ```
 
-Common failure responses:
+---
 
-- `503` when AI is not configured (`GROQ_API_KEY` missing or invalid config).
-- `400` when the payload is too large.
-- `429` when Groq rate limits are hit.
+## Enable AI Explanations (Groq)
+
+Set these environment variables before starting the backend:
+
+- `GROQ_API_KEY` (required)
+- `GROQ_MODEL` (optional, default: `llama-3.3-70b-versatile`)
+- `GROQ_FALLBACK_MODEL` (optional, default: `llama-3.1-8b-instant`)
+
+If `GROQ_API_KEY` is not set, the app still runs normally and the AI button is disabled.
+
+Privacy note: Generating AI explanations sends selected finding data, source snippet excerpts, and IR diff excerpts to Groq.
 
 ---
 
@@ -300,8 +279,10 @@ UB-Timebomb-Detector/
 ├── IMPLEMENTATION.md            ← LLVM IR details
 ├── EVALUATION.md                ← Metrics + comparison + test cases
 │
-├── build.sh                     ← Build script (install deps)
-├── run.sh                       ← Run script (eval / analyze / server)
+├── build.sh / build.ps1        ← Build scripts (install deps)
+├── run.sh / run.ps1            ← Run scripts (eval / analyze / server)
+│
+├── screenshots/                 ← Demo screenshots
 │
 ├── requirements.txt
 │
@@ -324,15 +305,14 @@ UB-Timebomb-Detector/
 │   ├── uninitialized.c
 │   └── loop_overflow.c
 │
-└── eval/
-    ├── run_evaluation.py        ← Batch test runner
-    ├── evaluation_results.json  ← Latest results
-    └── cve_cases/               ← 5 CVE reproducer test cases
-        ├── gcc_bug_30475.c
-        ├── cve_2009_1897.c
-        ├── cve_2017_9798.c
-        ├── cve_2014_3153.c
-        └── cve_2018_6789.c
+├── eval/
+│   ├── run_evaluation.py        ← Batch test runner
+│   ├── evaluation_results.json  ← Latest results
+│   └── cve_cases/               ← 5 CVE reproducer test cases
+│
+└── frontend/                    ← React + Vite UI
+    ├── src/
+    └── package.json
 ```
 
 ---
@@ -342,12 +322,8 @@ UB-Timebomb-Detector/
 | Layer | Technology |
 |---|---|
 | Backend | Python 3.10+, FastAPI, uvicorn |
+| Frontend | React 18, Vite, Tailwind CSS, Monaco Editor, Recharts |
 | Compiler | Clang/LLVM (14+ tested through 22) |
 | IR Parsing | Python regex (no llvmlite dependency) |
+| AI | Groq API (Llama 3.3 70B) |
 | Testing | pytest, custom evaluation harness |
-
----
-
-## License
-
-MIT
