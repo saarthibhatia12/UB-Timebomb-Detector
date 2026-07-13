@@ -4,13 +4,7 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ProjectRoot
 
-$VenvDir = Join-Path $ProjectRoot "venv"
-$PythonPath = Join-Path $VenvDir "Scripts\python.exe"
-
-if (-not (Test-Path $PythonPath)) {
-    Write-Host "ERROR: Virtual environment not found. Run .\build.ps1 first."
-    exit 1
-}
+$PythonPath = "C:\Users\graph\AppData\Local\Programs\Python\Python311\python.exe"
 
 $Mode = "eval"
 $TargetFile = ""

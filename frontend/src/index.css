@@ -104,3 +104,223 @@ body {
   height: 1.25rem;
   animation: spin 0.6s linear infinite;
 }
+
+/* -------------------------------------------------- */
+/* IR Diff Panel — AI-powered Before vs After view     */
+/* -------------------------------------------------- */
+
+.ir-diff-panel {
+  transition: all 0.3s ease;
+}
+
+/* Risk badge in header */
+.ir-diff-risk-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid;
+  line-height: 1.6;
+}
+
+/* Loading state */
+.ir-diff-loading {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.ir-diff-loading-icon {
+  flex-shrink: 0;
+}
+
+/* Error state */
+.ir-diff-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-radius: 0.75rem;
+  background: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+/* Content layout */
+.ir-diff-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  animation: fade-in-up 0.4s ease-out forwards;
+}
+
+/* Before / After cards grid */
+.ir-diff-cards-grid {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+@media (max-width: 640px) {
+  .ir-diff-cards-grid {
+    grid-template-columns: 1fr;
+  }
+  .ir-diff-arrow {
+    transform: rotate(90deg);
+    justify-self: center;
+  }
+}
+
+.ir-diff-card {
+  padding: 1rem 1.25rem;
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+
+.ir-diff-card:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.ir-diff-card-before {
+  border-left: 3px solid #3b82f6;
+}
+
+.ir-diff-card-after {
+  border-left: 3px solid #f59e0b;
+}
+
+.ir-diff-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.625rem;
+}
+
+.ir-diff-card-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ir-diff-card-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+}
+
+.ir-diff-card-text {
+  font-size: 0.825rem;
+  line-height: 1.65;
+  color: #cbd5e1;
+  margin: 0;
+}
+
+/* Arrow between cards */
+.ir-diff-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #475569;
+  opacity: 0.6;
+}
+
+/* Sections (Key Changes, Why It Matters) */
+.ir-diff-section {
+  padding: 1rem 1.25rem;
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ir-diff-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  margin: 0 0 0.75rem 0;
+}
+
+/* Key changes list */
+.ir-diff-changes-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ir-diff-change-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: #cbd5e1;
+}
+
+.ir-diff-change-bullet {
+  color: #06b6d4;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Why It Matters */
+.ir-diff-why-matters {
+  background: rgba(245, 158, 11, 0.04);
+  border-color: rgba(245, 158, 11, 0.12);
+}
+
+.ir-diff-why-text {
+  font-size: 0.8rem;
+  line-height: 1.65;
+  color: #cbd5e1;
+  margin: 0;
+}
+
+/* Equivalent source code blocks inside Before/After cards */
+.ir-diff-code-block {
+  margin: 0.75rem 0 0 0;
+  padding: 0.75rem 1rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  line-height: 1.7;
+  color: #c4cee8;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  white-space: pre-wrap;
+  word-break: break-word;
+  tab-size: 4;
+  overflow-x: auto;
+  max-height: 240px;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a45 transparent;
+}
+
+.ir-diff-code-before {
+  border-top: 2px solid rgba(59, 130, 246, 0.4);
+}
+
+.ir-diff-code-after {
+  border-top: 2px solid rgba(245, 158, 11, 0.4);
+}

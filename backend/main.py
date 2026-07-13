@@ -19,11 +19,13 @@ from backend.core.ai import (
     GroqAPIError,
     GroqClient,
     AIExplainStatus,
+    build_ir_diff_explain_prompt,
     build_prompt_payload,
     load_groq_config,
     parse_ai_explanation_content,
+    parse_ir_diff_explanation_content,
 )
-from backend.core.ai.schemas import AIExplainRequest, AIExplainResponse, phase0_contract_response
+from backend.core.ai.schemas import AIExplainRequest, AIExplainResponse, IRDiffExplainRequest, IRDiffExplainResponse, phase0_contract_response
 from backend.core.change_detector import detect_changes
 from backend.core.compile_engine import CompilationError, compile_both
 from backend.core.report_generator import generate_report
@@ -249,6 +251,56 @@ async def analyze_file(request: AnalyzeFileRequest) -> dict:
         raise
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Analysis error: {str(exc)}") from exc
+
+
+@app.post("/ir-diff-explain", response_model=IRDiffExplainResponse)
+async def ir_diff_explain(request: IRDiffExplainRequest) -> IRDiffExplainResponse:
+    """Generate a human-readable Before vs After explanation of LLVM IR changes using Groq."""
+
+    try:
+        config = load_groq_config()
+    except GroqAPIError as exc:
+        raise HTTPException(status_code=503, detail=f"AI configuration error: {str(exc)}") from exc
+
+    if not config.enabled:
+        raise HTTPException(status_code=503, detail="AI not configured. Set GROQ_API_KEY.")
+
+    if not request.o0_ir.strip() and not request.o2_ir.strip():
+        raise HTTPException(status_code=400, detail="Both O0 and O2 IR are empty.")
+
+    payload_size = len(request.o0_ir) + len(request.o2_ir) + len(request.source_snippet or "")
+    max_payload_size = _max_ai_payload_size(config.max_chars)
+    if payload_size > max_payload_size:
+        raise HTTPException(
+            status_code=400,
+            detail=f"IR diff payload exceeds size limit ({max_payload_size} chars)",
+        )
+
+    try:
+        prompt_payload = build_ir_diff_explain_prompt(
+            request.o0_ir,
+            request.o2_ir,
+            source_snippet=request.source_snippet,
+            finding_context=request.finding_context,
+            max_chars=config.max_chars,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid IR diff payload: {str(exc)}") from exc
+
+    try:
+        client = GroqClient(config=config)
+        completion = await client.chat_completion(
+            messages=prompt_payload["messages"],
+            temperature=0.1,
+            response_format={"type": "json_object"},
+        )
+        explanation = parse_ir_diff_explanation_content(completion.get("content", ""))
+        return IRDiffExplainResponse(
+            model=completion.get("model") or config.model,
+            explanation=explanation,
+        )
+    except GroqAPIError as exc:
+        raise HTTPException(status_code=_map_groq_error_status(exc), detail=str(exc)) from exc
 
 
 # Run with: uvicorn backend.main:app --reload --port 8000

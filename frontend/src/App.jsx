@@ -114,6 +114,8 @@ function App() {
               <IRDiffViewer
                 o0IR={selectedFinding?.ir?.O0 || ''}
                 o2IR={selectedFinding?.ir?.O2 || ''}
+                finding={selectedFinding}
+                sourceCode={sourceCode}
               />
             </div>
 

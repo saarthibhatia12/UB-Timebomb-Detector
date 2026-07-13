@@ -41,6 +41,34 @@ class AIExplainStatus(BaseModel):
     reason: str = ""
 
 
+class IRDiffExplanation(BaseModel):
+    """Human-readable IR diff explanation rendered in the LLVM IR Diff panel."""
+
+    before_summary: str = ""
+    before_code: str = ""
+    after_summary: str = ""
+    after_code: str = ""
+    key_changes: List[str] = Field(default_factory=list)
+    why_it_matters: str = ""
+    risk_level: str = "medium"
+
+
+class IRDiffExplainRequest(BaseModel):
+    """Request payload for the IR diff explanation endpoint."""
+
+    o0_ir: str = ""
+    o2_ir: str = ""
+    source_snippet: Optional[str] = None
+    finding_context: Dict[str, Any] = Field(default_factory=dict)
+
+
+class IRDiffExplainResponse(BaseModel):
+    """Response envelope for the IR diff explanation endpoint."""
+
+    model: str = ""
+    explanation: IRDiffExplanation = Field(default_factory=IRDiffExplanation)
+
+
 def phase0_contract_response() -> AIExplainResponse:
     """Return an empty response shape used to lock the API contract in Phase 0."""
 

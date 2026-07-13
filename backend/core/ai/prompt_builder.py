@@ -7,7 +7,7 @@ from difflib import unified_diff
 from typing import Any, Dict, List, Mapping, Tuple
 
 from backend.core.ai.groq_client import DEFAULT_MAX_CHARS
-from backend.core.ai.schemas import AIExplanation
+from backend.core.ai.schemas import AIExplanation, IRDiffExplanation
 
 
 MAX_IR_DIFF_LINES = 400
@@ -350,3 +350,164 @@ def parse_ai_explanation_content(content: str) -> AIExplanation:
         summary_plain=_truncate_text(normalized, 1500, suffix="... [raw model output truncated]"),
         caveats="Model output was not valid JSON; returning raw summary.",
     )
+
+
+# ---------------------------------------------------------------------------
+# IR Diff Explanation (human-readable Before vs After)
+# ---------------------------------------------------------------------------
+
+IR_DIFF_EXPLAIN_SYSTEM_PROMPT = (
+    "You are an expert compiler engineer who explains LLVM IR changes to developers. "
+    "Given the unoptimized (O0) and optimized (O2) LLVM IR for a function, explain "
+    "what changed in plain English that any developer can understand. "
+    "Focus on behavioral differences, not syntactic details. "
+    "Do NOT use raw LLVM IR syntax in your explanations — translate everything into "
+    "human-readable descriptions of what the code does. "
+    "Return strict JSON with keys: before_summary, before_code, after_summary, after_code, "
+    "key_changes, why_it_matters, risk_level.\n\n"
+    "Field definitions:\n"
+    "- before_summary: 2-4 sentences describing what the unoptimized code does in plain English.\n"
+    "- before_code: The equivalent C/C++ source code that represents what the unoptimized (O0) "
+    "IR is doing. This should be a simplified, readable reconstruction — not the original source. "
+    "Show the logic as clean C code. Do NOT include any comments in the code.\n"
+    "- after_summary: 2-4 sentences describing what the optimized code does in plain English.\n"
+    "- after_code: The equivalent C/C++ source code that represents what the optimized (O2) "
+    "IR is doing. Show what the compiler reduced the function to after optimization. "
+    "If code was removed entirely, show the simplified version (e.g., an empty function body "
+    "or a direct return). Do NOT include any comments in the code.\n"
+    "- key_changes: a JSON array of 2-5 short bullet strings describing each significant "
+    "optimization change (e.g., 'Removed the null-pointer check before dereferencing').\n"
+    "- why_it_matters: 1-3 sentences explaining why these changes could be dangerous if "
+    "undefined behavior is present in the source code.\n"
+    "- risk_level: one of 'low', 'medium', 'high', 'critical' based on the severity of "
+    "the optimization's assumptions about defined behavior."
+)
+
+
+def build_ir_diff_explain_prompt(
+    o0_ir: str,
+    o2_ir: str,
+    source_snippet: str | None = None,
+    finding_context: Mapping[str, Any] | None = None,
+    *,
+    max_chars: int = DEFAULT_MAX_CHARS,
+) -> Dict[str, Any]:
+    """Build system+user messages for the IR diff explanation endpoint."""
+
+    if max_chars <= 0:
+        raise ValueError("max_chars must be greater than zero")
+
+    max_user_chars = max(500, max_chars - len(IR_DIFF_EXPLAIN_SYSTEM_PROMPT) - 1)
+
+    # Budget allocation: 15% source, 35% O0 IR, 35% O2 IR, 15% finding context
+    source_budget = max(100, int(max_user_chars * 0.15))
+    ir_budget_each = max(200, int(max_user_chars * 0.35))
+    context_budget = max(100, int(max_user_chars * 0.15))
+
+    o0_text = _truncate_text(_as_text(o0_ir), ir_budget_each, suffix="... [O0 IR truncated]")
+    o2_text = _truncate_text(_as_text(o2_ir), ir_budget_each, suffix="... [O2 IR truncated]")
+    source_text = _truncate_text(
+        _as_text(source_snippet), source_budget, suffix="... [source truncated]"
+    )
+
+    context_parts: List[str] = []
+    if isinstance(finding_context, Mapping):
+        for key in ("readable_name", "category", "severity", "detail", "fix"):
+            val = _as_text(finding_context.get(key, ""))
+            if val:
+                context_parts.append(f"- {key}: {val}")
+    context_text = _truncate_text(
+        "\n".join(context_parts), context_budget, suffix="... [context truncated]"
+    )
+
+    sections = [
+        "## Source Code",
+        source_text or "(not available)",
+        "## Finding Context",
+        context_text or "(no finding context)",
+        "## Unoptimized IR (O0)",
+        o0_text or "(not available)",
+        "## Optimized IR (O2)",
+        o2_text or "(not available)",
+    ]
+
+    user_prompt = "\n\n".join(sections)
+    user_prompt = _truncate_text(
+        user_prompt, max_user_chars, suffix="... [prompt truncated]"
+    )
+
+    messages = [
+        {"role": "system", "content": IR_DIFF_EXPLAIN_SYSTEM_PROMPT},
+        {"role": "user", "content": user_prompt},
+    ]
+
+    return {
+        "messages": messages,
+        "chars_used": len(IR_DIFF_EXPLAIN_SYSTEM_PROMPT) + len(user_prompt),
+        "max_chars": max_chars,
+    }
+
+
+def _normalize_ir_diff_explanation(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    """Normalize and sanitize the LLM response into the expected schema fields."""
+
+    key_changes_raw = payload.get("key_changes", [])
+    if isinstance(key_changes_raw, list):
+        key_changes = [_as_text(v).strip() for v in key_changes_raw if _as_text(v).strip()]
+    elif isinstance(key_changes_raw, str):
+        key_changes = [key_changes_raw.strip()] if key_changes_raw.strip() else []
+    else:
+        key_changes = []
+
+    risk = _as_text(payload.get("risk_level", "medium")).strip().lower()
+    if risk not in ("low", "medium", "high", "critical"):
+        risk = "medium"
+
+    return {
+        "before_summary": _as_text(payload.get("before_summary", "")).strip(),
+        "before_code": _as_text(payload.get("before_code", "")).strip(),
+        "after_summary": _as_text(payload.get("after_summary", "")).strip(),
+        "after_code": _as_text(payload.get("after_code", "")).strip(),
+        "key_changes": key_changes,
+        "why_it_matters": _as_text(payload.get("why_it_matters", "")).strip(),
+        "risk_level": risk,
+    }
+
+
+def parse_ir_diff_explanation_content(content: str) -> IRDiffExplanation:
+    """Parse model output as IRDiffExplanation with safe JSON fallbacks."""
+
+    normalized = _as_text(content).strip()
+    if not normalized:
+        return IRDiffExplanation()
+
+    parsed_obj: Any = None
+    try:
+        parsed_obj = json.loads(normalized)
+    except ValueError:
+        candidate_json = _extract_first_json_object(normalized)
+        if candidate_json:
+            try:
+                parsed_obj = json.loads(candidate_json)
+            except ValueError:
+                parsed_obj = None
+
+    if isinstance(parsed_obj, Mapping):
+        # Support both top-level and nested {"explanation": {...}} shapes
+        candidate = (
+            parsed_obj.get("explanation")
+            if isinstance(parsed_obj.get("explanation"), Mapping)
+            else parsed_obj
+        )
+        if isinstance(candidate, Mapping):
+            try:
+                return IRDiffExplanation(**_normalize_ir_diff_explanation(candidate))
+            except Exception:  # noqa: BLE001
+                pass
+
+    # Fallback: put the raw text into before_summary
+    return IRDiffExplanation(
+        before_summary=_truncate_text(normalized, 1500, suffix="... [raw output truncated]"),
+        why_it_matters="Model output was not valid JSON; showing raw summary.",
+    )
+
